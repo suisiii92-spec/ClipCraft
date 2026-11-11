@@ -2,4 +2,7 @@ node_modules
 dist
 server.log
 server.pid
+tunnel.log
+tunnel.pid
+cookies.txt
 __pycache__

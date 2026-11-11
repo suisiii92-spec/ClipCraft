@@ -1,14 +1,21 @@
-import glob, hashlib, os, re, shutil, subprocess, tempfile, threading, time, uuid
-from flask import Flask, request, send_file, send_from_directory, jsonify
+import glob, hashlib, hmac, os, re, shutil, subprocess, tempfile, threading, time, uuid
+from flask import Flask, Response, request, send_file, send_from_directory, jsonify
 from flask_cors import CORS
 import yt_dlp
 import analysis
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DIST = os.path.join(HERE, "..", "dist")
-COOKIES = os.path.join(HERE, "cookies.txt")     # optional: helps when YouTube blocks cloud servers
 WORK = os.path.join(tempfile.gettempdir(), "clipcraft")
 os.makedirs(WORK, exist_ok=True)
+ACCESS_PASSWORD = os.environ.get("ACCESS_PASSWORD", "")   # set it to lock the site (any username)
+
+# Optional YouTube cookies (helps when YouTube blocks cloud servers). Never commit this file to GitHub.
+COOKIES = os.path.join(WORK, "cookies.txt")
+for _src in ("/etc/secrets/cookies.txt", os.path.join(HERE, "cookies.txt")):   # Render secret file / local
+    if os.path.exists(_src):
+        shutil.copy(_src, COOKIES)
+        break
 
 app = Flask(__name__, static_folder=DIST, static_url_path="")
 CORS(app)
@@ -68,6 +75,16 @@ def probe_size(path):
 
 def plan(src, duration, count):
     return analysis.pick_clips(src["sig"], count=max(1, min(12, count)), fixed=duration)
+
+
+@app.before_request
+def guard():
+    if not ACCESS_PASSWORD or request.path == "/api/health":
+        return None
+    auth = request.authorization
+    if auth and hmac.compare_digest((auth.password or "").encode(), ACCESS_PASSWORD.encode()):
+        return None
+    return Response("Password required", 401, {"WWW-Authenticate": 'Basic realm="ClipCraft"'})
 
 
 @app.get("/")
